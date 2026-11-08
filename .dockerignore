@@ -1,0 +1,3 @@
+*
+!docker/healthcheck.sh
+!*/target/app.jar

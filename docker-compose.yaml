@@ -1,0 +1,267 @@
+# MicroShop - moi truong local
+#
+#   Build jar truoc:      ./mvnw clean package -DskipTests
+#   Chay core:            docker compose up -d --build
+#   Chay kem monitoring:  docker compose --profile observability up -d --build
+#   Xoa sach (ca data):   docker compose --profile observability down -v
+#
+# Port tren may host:
+#   8080 api-gateway (UI + /api)   9000 auth-service (trang login SSO)   8081 product-service (Swagger)
+#   8090 kafka-ui                  5432 postgres   9092 kafka   6379 redis
+#   observability: 3000 grafana, 9090 prometheus, 5601 kibana, 9200 elasticsearch
+
+name: microshop
+
+x-service: &service
+  build: &build
+    context: .
+    dockerfile: docker/service.Dockerfile
+  restart: unless-stopped
+  mem_limit: 512m
+  labels:
+    microshop.logs: "true"          # Filebeat chi thu log cua container co label nay
+  environment: &service-env
+    LOG_FORMAT: ecs                 # log JSON (Elastic Common Schema) -> ELK parse duoc
+    DB_HOST: postgres
+    KAFKA_BOOTSTRAP: kafka:29092
+    REDIS_HOST: redis
+    # Browser thay auth-service o localhost:9000, con container thay o auth-service:9000.
+    # Token luon co iss = AUTH_PUBLIC_URL nen moi service validate theo dia chi nay.
+    AUTH_PUBLIC_URL: http://localhost:9000
+    AUTH_INTERNAL_URL: http://auth-service:9000
+    PRODUCT_SERVICE_URL: http://product-service:8081
+    # Bat tracing: moi request co traceId, di xuyen qua REST va Kafka
+    MANAGEMENT_TRACING_SAMPLING_PROBABILITY: "1.0"
+
+services:
+  # ---------------------------------------------------------------- infrastructure
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports: ["5432:5432"]
+    volumes:
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  kafka:
+    image: apache/kafka:4.2.0
+    # KRaft mode: khong can Zookeeper. 1 node vua la broker vua la controller.
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: INTERNAL://:29092,EXTERNAL://:9092,CONTROLLER://:9093
+      # INTERNAL cho container (kafka:29092), EXTERNAL cho app chay tren IDE (localhost:9092)
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:29092,EXTERNAL://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"   # topic do service khai bao (NewTopic)
+      KAFKA_HEAP_OPTS: -Xms256m -Xmx512m
+    ports: ["9092:9092"]
+    volumes:
+      - kafkadata:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+
+  redis:
+    image: redis:8-alpine
+    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  kafka-ui:
+    image: kafbat/kafka-ui:v1.4.2
+    environment:
+      KAFKA_CLUSTERS_0_NAME: microshop
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+    ports: ["8090:8080"]
+    depends_on:
+      kafka: { condition: service_healthy }
+
+  # ---------------------------------------------------------------- services
+  auth-service:
+    <<: *service
+    build: { <<: *build, args: { MODULE: auth-service } }
+    environment:
+      <<: *service-env
+      AUTH_ISSUER: http://localhost:9000
+      GATEWAY_URL: http://localhost:8080
+      # Tao OAuth App tren GitHub (xem README) roi dat trong file .env
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-change-me}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-change-me}
+      ADMIN_GITHUB_LOGINS: ${ADMIN_GITHUB_LOGINS:-}
+    ports: ["9000:9000"]
+    healthcheck: { test: ["CMD", "healthcheck", "9000"], interval: 5s, timeout: 3s, retries: 40, start_period: 20s }
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  product-service:
+    <<: *service
+    build: { <<: *build, args: { MODULE: product-service } }
+    # Mo port de xem Swagger UI va thu goi thang service (khong qua gateway -> 401).
+    # Cac service con lai chi nam trong mang docker: moi request phai di qua gateway.
+    ports: ["8081:8081"]
+    healthcheck: { test: ["CMD", "healthcheck", "8081"], interval: 5s, timeout: 3s, retries: 40, start_period: 20s }
+    depends_on:
+      postgres: { condition: service_healthy }
+      auth-service: { condition: service_healthy }
+
+  order-service:
+    <<: *service
+    build: { <<: *build, args: { MODULE: order-service } }
+    healthcheck: { test: ["CMD", "healthcheck", "8082"], interval: 5s, timeout: 3s, retries: 40, start_period: 20s }
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+      auth-service: { condition: service_healthy }
+      product-service: { condition: service_healthy }
+
+  payment-service:
+    <<: *service
+    build: { <<: *build, args: { MODULE: payment-service } }
+    healthcheck: { test: ["CMD", "healthcheck", "8083"], interval: 5s, timeout: 3s, retries: 40, start_period: 20s }
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+      auth-service: { condition: service_healthy }
+
+  notification-service:
+    <<: *service
+    build: { <<: *build, args: { MODULE: notification-service } }
+    healthcheck: { test: ["CMD", "healthcheck", "8084"], interval: 5s, timeout: 3s, retries: 40, start_period: 20s }
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+      auth-service: { condition: service_healthy }
+
+  api-gateway:
+    <<: *service
+    build: { <<: *build, args: { MODULE: api-gateway } }
+    environment:
+      <<: *service-env
+      GATEWAY_PUBLIC_URL: http://localhost:8080
+      ORDER_SERVICE_URL: http://order-service:8082
+      PAYMENT_SERVICE_URL: http://payment-service:8083
+      NOTIFICATION_SERVICE_URL: http://notification-service:8084
+    ports: ["8080:8080"]
+    healthcheck: { test: ["CMD", "healthcheck", "8080"], interval: 5s, timeout: 3s, retries: 40, start_period: 20s }
+    depends_on:
+      redis: { condition: service_healthy }
+      auth-service: { condition: service_healthy }
+
+  # ---------------------------------------------------------------- observability (profile)
+  # Metrics: service --(/actuator/prometheus)--> Prometheus --> Grafana
+  prometheus:
+    image: prom/prometheus:v3.8.0
+    profiles: [observability]
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports: ["9090:9090"]
+
+  grafana:
+    image: grafana/grafana:12.3.0
+    profiles: [observability]
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"        # demo: vao xem khong can login (admin/admin de sua)
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/microshop-overview.json
+    volumes:
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./docker/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports: ["3000:3000"]
+    depends_on: [prometheus]
+
+  # Logs: container stdout --> Filebeat --> Logstash --> Elasticsearch --> Kibana
+  elasticsearch:
+    image: elasticsearch:9.5.5
+    profiles: [observability]
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"          # chi cho demo local
+      # Laptop sinh vien hay day o dia (>90%) -> ES khoa shard, Kibana treo. Tat nguong cho demo.
+      cluster.routing.allocation.disk.threshold_enabled: "false"
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+    mem_limit: 1g
+    volumes:
+      - esdata:/usr/share/elasticsearch/data
+    ports: ["9200:9200"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:9200/_cluster/health > /dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  logstash:
+    image: logstash:9.5.5
+    profiles: [observability]
+    environment:
+      LS_JAVA_OPTS: -Xms256m -Xmx256m
+      XPACK_MONITORING_ENABLED: "false"
+    volumes:
+      - ./docker/logstash/pipeline:/usr/share/logstash/pipeline:ro
+    depends_on:
+      elasticsearch: { condition: service_healthy }
+
+  filebeat:
+    image: elastic/filebeat:9.5.5
+    profiles: [observability]
+    user: root                                  # can quyen doc docker.sock va log container
+    command: ["filebeat", "-e", "--strict.perms=false"]
+    volumes:
+      - ./docker/filebeat/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    depends_on: [logstash]
+
+  kibana:
+    image: kibana:9.5.5
+    profiles: [observability]
+    environment:
+      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+    ports: ["5601:5601"]
+    depends_on:
+      elasticsearch: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:5601/api/status | grep -q '\"level\":\"available\"'"]
+      interval: 10s
+      timeout: 5s
+      retries: 40
+
+  # Chay 1 lan: tao data view "microshop-logs-*" trong Kibana de vao Discover la thay log
+  kibana-setup:
+    image: curlimages/curl:8.17.0
+    profiles: [observability]
+    restart: "no"
+    depends_on:
+      kibana: { condition: service_healthy }
+    command:
+      - sh
+      - -c
+      - >-
+        curl -s -o /dev/null -w 'HTTP %{http_code}' -X POST http://kibana:5601/api/data_views/data_view
+        -H 'kbn-xsrf: true' -H 'Content-Type: application/json'
+        -d '{"override":true,"data_view":{"id":"microshop-logs","title":"microshop-logs-*","name":"MicroShop logs","timeFieldName":"@timestamp"}}'
+        && echo ' -> data view OK'
+
+volumes:
+  pgdata:
+  kafkadata:
+  esdata:

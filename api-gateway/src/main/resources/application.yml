@@ -1,0 +1,145 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+  threads:
+    virtual:
+      enabled: true
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: 6379
+
+  session:
+    # Session (chua OAuth2 token) luu o Redis -> chay nhieu instance gateway van giu dang nhap
+    timeout: 30m
+    redis:
+      namespace: microshop:gateway:session
+
+  security:
+    oauth2:
+      client:
+        registration:
+          microshop:
+            provider: microshop
+            client-id: api-gateway
+            client-secret: ${GATEWAY_CLIENT_SECRET:gateway-secret}
+            authorization-grant-type: authorization_code
+            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
+            scope: openid,profile,email
+        provider:
+          # Khong dung issuer-uri (discovery) vi browser va gateway thay auth-service o 2 dia chi khac nhau:
+          #   browser  -> http://localhost:9000      (authorization-uri)
+          #   gateway  -> http://auth-service:9000   (token, jwks, userinfo: goi trong mang docker)
+          microshop:
+            authorization-uri: ${AUTH_PUBLIC_URL:http://localhost:9000}/oauth2/authorize
+            token-uri: ${AUTH_INTERNAL_URL:http://localhost:9000}/oauth2/token
+            jwk-set-uri: ${AUTH_INTERNAL_URL:http://localhost:9000}/oauth2/jwks
+            user-info-uri: ${AUTH_INTERNAL_URL:http://localhost:9000}/userinfo
+            user-name-attribute: sub
+      resourceserver:
+        jwt:
+          issuer-uri: ${AUTH_PUBLIC_URL:http://localhost:9000}
+          jwk-set-uri: ${AUTH_INTERNAL_URL:http://localhost:9000}/oauth2/jwks
+
+  cloud:
+    gateway:
+      server:
+        webflux:
+          httpclient:
+            connect-timeout: 2000      # ms
+            response-timeout: 5s
+          default-filters:
+            # Khong de cookie cua browser (session gateway, XSRF) lot xuong service phia sau
+            - RemoveRequestHeader=Cookie
+            # Luu session truoc khi forward (TokenRelay co the vua refresh token)
+            - SaveSession
+            # Lay access token trong session -> header "Authorization: Bearer ..."
+            - TokenRelay=
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 20    # request/giay
+                redis-rate-limiter.burstCapacity: 40
+                key-resolver: "#{@userKeyResolver}"
+          routes:
+            - id: auth-service
+              uri: ${AUTH_INTERNAL_URL:http://localhost:9000}
+              predicates:
+                - Path=/api/users/**,/api/admin/users/**
+              filters:
+                - name: CircuitBreaker
+                  args: { name: auth, fallbackUri: "forward:/fallback/auth-service" }
+
+            - id: product-service
+              uri: ${PRODUCT_SERVICE_URL:http://localhost:8081}
+              predicates:
+                - Path=/api/products/**
+              filters:
+                - name: CircuitBreaker
+                  args: { name: product, fallbackUri: "forward:/fallback/product-service" }
+                - name: Retry               # chi retry GET (idempotent), KHONG retry POST tao don!
+                  args: { retries: 2, methods: GET, series: SERVER_ERROR }
+
+            - id: order-service
+              uri: ${ORDER_SERVICE_URL:http://localhost:8082}
+              predicates:
+                - Path=/api/cart/**,/api/orders/**,/api/admin/orders/**
+              filters:
+                - name: CircuitBreaker
+                  args: { name: order, fallbackUri: "forward:/fallback/order-service" }
+
+            - id: payment-service
+              uri: ${PAYMENT_SERVICE_URL:http://localhost:8083}
+              predicates:
+                - Path=/api/wallet/**
+              filters:
+                - name: CircuitBreaker
+                  args: { name: payment, fallbackUri: "forward:/fallback/payment-service" }
+
+            - id: notification-service
+              uri: ${NOTIFICATION_SERVICE_URL:http://localhost:8084}
+              predicates:
+                - Path=/api/notifications/**
+              filters:
+                - name: CircuitBreaker
+                  args: { name: notification, fallbackUri: "forward:/fallback/notification-service" }
+
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+  timelimiter:
+    configs:
+      default:
+        timeout-duration: 5s
+
+microshop:
+  auth:
+    public-url: ${AUTH_PUBLIC_URL:http://localhost:9000}
+  gateway:
+    public-url: ${GATEWAY_PUBLIC_URL:http://localhost:8080}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  tracing:
+    sampling:
+      probability: 1.0        # demo: trace 100% request
+  otlp:
+    metrics:
+      export:
+        enabled: false        # metrics do Prometheus keo (pull) qua /actuator/prometheus
+
+logging:
+  structured:
+    format:
+      console: ${LOG_FORMAT:}

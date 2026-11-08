@@ -1,0 +1,16 @@
+package com.microshop.order.order;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
+public interface OrderRepository extends JpaRepository<Order, UUID> {
+
+    List<Order> findTop50ByUserIdOrderByCreatedAtDesc(String userId);
+
+    Optional<Order> findByIdAndUserId(UUID id, String userId);
+
+    List<Order> findTop100ByOrderByCreatedAtDesc();
+}

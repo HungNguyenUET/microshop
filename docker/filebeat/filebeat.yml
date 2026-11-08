@@ -1,0 +1,24 @@
+# Doc stdout cua cac container (Docker luu o /var/lib/docker/containers) -> gui sang Logstash.
+# Chi lay container co label "microshop.logs=true" (cac Spring Boot service).
+filebeat.autodiscover:
+  providers:
+    - type: docker
+      templates:
+        - condition:
+            equals:
+              docker.container.labels.microshop.logs: "true"
+          config:
+            - type: filestream
+              id: "container-${data.docker.container.id}"
+              paths:
+                - /var/lib/docker/containers/${data.docker.container.id}/*.log
+              parsers:
+                - container: ~
+
+processors:
+  - add_docker_metadata: ~
+
+output.logstash:
+  hosts: ["logstash:5044"]
+
+logging.level: warning
