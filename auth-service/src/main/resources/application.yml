@@ -65,3 +65,7 @@ logging:
     format:
       # Log JSON chuan ECS -> Filebeat/Logstash/Elasticsearch doc truc tiep, khong can grok
       console: ${LOG_FORMAT:}
+
+springdoc:
+  # Chi mo ta REST API; bo trang /login (HTML) va endpoint OAuth2 (xem /.well-known/openid-configuration)
+  paths-to-match: /api/**

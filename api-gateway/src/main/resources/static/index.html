@@ -1,72 +1,15 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="vi">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>MicroShop</title>
-  <link rel="stylesheet" href="/app.css">
-</head>
-<body>
-<header class="topbar">
-  <div class="brand">MicroShop <span class="tag">demo microservices</span></div>
-  <div id="account" class="account"></div>
-</header>
-
-<nav class="tabs" id="tabs">
-  <button data-tab="products" class="active">Sản phẩm</button>
-  <button data-tab="cart" data-auth>Giỏ hàng <span id="cart-count" class="count"></span></button>
-  <button data-tab="orders" data-auth>Đơn hàng</button>
-  <button data-tab="wallet" data-auth>Ví</button>
-  <button data-tab="notifications" data-auth>Thông báo</button>
-  <button data-tab="admin" data-admin>Quản trị</button>
-</nav>
-
-<main>
-  <div id="flash" class="flash" hidden></div>
-
-  <section id="tab-products">
-    <div class="toolbar">
-      <input id="search" type="search" placeholder="Tìm sản phẩm..." aria-label="Tìm sản phẩm">
-    </div>
-    <div id="products" class="grid"></div>
-  </section>
-
-  <section id="tab-cart" hidden>
-    <div id="cart"></div>
-  </section>
-
-  <section id="tab-orders" hidden>
-    <div id="orders"></div>
-  </section>
-
-  <section id="tab-wallet" hidden>
-    <div id="wallet"></div>
-  </section>
-
-  <section id="tab-notifications" hidden>
-    <div id="notifications"></div>
-  </section>
-
-  <section id="tab-admin" hidden>
-    <h2>Thêm sản phẩm</h2>
-    <form id="product-form" class="form-row">
-      <input name="sku" placeholder="SKU" required>
-      <input name="name" placeholder="Tên sản phẩm" required>
-      <input name="category" placeholder="Danh mục" required>
-      <input name="price" type="number" min="0" step="1000" placeholder="Giá (VND)" required>
-      <button type="submit">Thêm</button>
-    </form>
-    <h2>Người dùng &amp; phân quyền</h2>
-    <div id="admin-users"></div>
-    <h2>Tất cả đơn hàng</h2>
-    <div id="admin-orders"></div>
-  </section>
-</main>
-
-<footer class="footer">
-  Browser chỉ giữ cookie session HttpOnly. Access token nằm ở API Gateway (BFF pattern).
-</footer>
-
-<script src="/app.js"></script>
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>MicroShop</title>
+    <script type="module" crossorigin src="/assets/index-C48kiu6P.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-BgIke7Zc.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
 </html>

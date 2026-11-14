@@ -107,6 +107,46 @@ spring:
                 - name: CircuitBreaker
                   args: { name: notification, fallbackUri: "forward:/fallback/notification-service" }
 
+            # Swagger tap trung: /v3/api-docs/{service} -> /v3/api-docs cua service do.
+            # Browser chi can goi gateway, service van nam trong mang docker (khong mo port).
+            - id: product-api-docs
+              uri: ${PRODUCT_SERVICE_URL:http://localhost:8081}
+              predicates: [ "Path=/v3/api-docs/product-service" ]
+              filters: [ "SetPath=/v3/api-docs" ]
+            - id: order-api-docs
+              uri: ${ORDER_SERVICE_URL:http://localhost:8082}
+              predicates: [ "Path=/v3/api-docs/order-service" ]
+              filters: [ "SetPath=/v3/api-docs" ]
+            - id: payment-api-docs
+              uri: ${PAYMENT_SERVICE_URL:http://localhost:8083}
+              predicates: [ "Path=/v3/api-docs/payment-service" ]
+              filters: [ "SetPath=/v3/api-docs" ]
+            - id: notification-api-docs
+              uri: ${NOTIFICATION_SERVICE_URL:http://localhost:8084}
+              predicates: [ "Path=/v3/api-docs/notification-service" ]
+              filters: [ "SetPath=/v3/api-docs" ]
+            - id: auth-api-docs
+              uri: ${AUTH_INTERNAL_URL:http://localhost:9000}
+              predicates: [ "Path=/v3/api-docs/auth-service" ]
+              filters: [ "SetPath=/v3/api-docs" ]
+
+# Swagger UI chung: http://localhost:8080/swagger-ui.html (chon service o dropdown goc tren ben phai).
+# "Try it out" goi qua gateway bang cookie SESSION -> dang nhap o trang chu truoc khi thu API can quyen.
+springdoc:
+  paths-to-match: /api/**           # tai lieu rieng cua gateway: chi /api/me
+  swagger-ui:
+    path: /swagger-ui.html
+    csrf:
+      enabled: true                 # doc cookie XSRF-TOKEN -> gui header X-XSRF-TOKEN (gateway bat CSRF)
+    urls-primary-name: product-service
+    urls:
+      - { name: product-service, url: /v3/api-docs/product-service }
+      - { name: order-service, url: /v3/api-docs/order-service }
+      - { name: payment-service, url: /v3/api-docs/payment-service }
+      - { name: notification-service, url: /v3/api-docs/notification-service }
+      - { name: auth-service, url: /v3/api-docs/auth-service }
+      - { name: api-gateway, url: /v3/api-docs }
+
 resilience4j:
   circuitbreaker:
     configs:

@@ -15,6 +15,8 @@ public class SecurityConfig {
         return http
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/actuator/health/**", "/actuator/prometheus").permitAll()
+                        // Tai lieu API (gateway gom ve Swagger UI chung). Chi la mo ta, khong lo du lieu.
+                        .requestMatchers("/v3/api-docs/**").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/cart/**", "/api/orders/**").hasRole("USER")
                         .anyRequest().authenticated())

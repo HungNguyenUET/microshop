@@ -65,8 +65,10 @@ public class SecurityConfig {
                                                   OidcLogoutHandler logoutHandler) {
         return http
                 .authorizeExchange(exchange -> exchange
-                        .pathMatchers("/", "/index.html", "/app.js", "/app.css", "/favicon.ico").permitAll()
+                        .pathMatchers("/", "/index.html", "/assets/**", "/favicon.ico", "/favicon.svg").permitAll()
                         .pathMatchers("/actuator/health/**", "/actuator/prometheus", "/fallback/**").permitAll()
+                        // Swagger UI chung + tai lieu OpenAPI cua cac service (chi mo ta API, goi API van can quyen)
+                        .pathMatchers("/swagger-ui.html", "/swagger-ui/**", "/webjars/**", "/v3/api-docs/**").permitAll()
                         .pathMatchers(HttpMethod.GET, "/api/products/**").permitAll()
                         // Defense in depth: chan som o gateway, service phia sau van tu kiem tra lai
                         .pathMatchers("/api/admin/**").hasRole("ADMIN")

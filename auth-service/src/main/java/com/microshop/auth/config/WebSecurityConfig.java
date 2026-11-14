@@ -41,7 +41,7 @@ public class WebSecurityConfig {
     SecurityFilterChain loginSecurityFilterChain(HttpSecurity http, GithubOAuth2UserService githubUserService) throws Exception {
         return http
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/login", "/error", "/css/**", "/actuator/health/**", "/actuator/prometheus").permitAll()
+                        .requestMatchers("/login", "/error", "/css/**", "/actuator/health/**", "/actuator/prometheus", "/v3/api-docs/**").permitAll()
                         .anyRequest().authenticated())
                 .formLogin(form -> form.loginPage("/login"))
                 .oauth2Login(oauth -> oauth

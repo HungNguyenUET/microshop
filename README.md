@@ -66,13 +66,19 @@ Có thể mở từng DB bằng DBeaver/pgAdmin qua port trên, hoặc `docker c
 Yêu cầu: JDK 25, Docker Desktop (hoặc Docker Engine + Compose v2), RAM trống khoảng **6 GB** cho core hoặc **9 GB** nếu bật thêm observability.
 
 ```bash
-# 1. Build jar (Dockerfile copy jar có sẵn để build image nhanh)
+# 1. Build frontend React (bundle được xuất vào api-gateway/src/main/resources/static)
+cd ../microshop-frontend
+npm ci
+npm run build
+
+# 2. Build jar (Dockerfile copy jar có sẵn để build image nhanh)
+cd ../microshop
 ./mvnw clean package -DskipTests
 
-# 2a. Chỉ chạy core: 6 service + 5 Postgres, Kafka, Redis, Kafka UI
+# 3a. Chỉ chạy core: 6 service + 5 Postgres, Kafka, Redis, Kafka UI
 docker compose up -d --build
 
-# 2b. Hoặc chạy kèm Prometheus, Grafana, ELK
+# 3b. Hoặc chạy kèm Prometheus, Grafana, ELK
 docker compose --profile observability up -d --build
 
 # Theo dõi
@@ -95,7 +101,8 @@ docker compose --profile observability down -v
 | http://localhost:3000 | Grafana: dashboard *MicroShop overview* (xem không cần login, sửa dùng admin/admin) |
 | http://localhost:9090 | Prometheus: Status, Targets |
 | http://localhost:5601 | Kibana: Discover, data view *MicroShop logs* |
-| http://localhost:8081/swagger-ui.html | Swagger của product-service (port duy nhất của service nghiệp vụ được mở ra ngoài) |
+| http://localhost:8080/swagger-ui.html | **Swagger UI chung** qua gateway: chọn service ở dropdown *Select a definition*. "Try it out" dùng cookie session + CSRF của gateway, nên đăng nhập ở trang chủ trước khi thử API cần quyền |
+| http://localhost:8081/swagger-ui.html | Swagger riêng của product-service (gọi thẳng service, bỏ qua gateway, nên API ghi sẽ bị 401) |
 
 ### Tài khoản
 
@@ -261,7 +268,7 @@ Script đi qua: xem sản phẩm khi chưa login, login SSO, giỏ hàng, đặt
 microshop/
 ├── common-events/          # event Kafka dùng chung (record + sealed interface)
 ├── auth-service/           # Spring Authorization Server + GitHub login
-├── api-gateway/            # Spring Cloud Gateway (BFF) + UI tĩnh (static/)
+├── api-gateway/            # Spring Cloud Gateway (BFF) + UI build tĩnh (static/)
 ├── product-service/
 ├── order-service/          # cart/, order/, client/ (REST tới product), messaging/ (Kafka)
 ├── payment-service/
@@ -270,6 +277,7 @@ microshop/
 │   ├── service.Dockerfile  # 1 Dockerfile dùng chung, ARG MODULE
 │   ├── prometheus/ grafana/ logstash/ filebeat/
 ├── scripts/e2e.js
+microshop-frontend/         # React + TypeScript storefront (build vào api-gateway/static/)
 └── docker-compose.yaml
 ```
 
