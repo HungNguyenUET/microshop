@@ -8,7 +8,7 @@ spring:
     virtual:
       enabled: true
   datasource:
-    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/notification_db
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5436}/notification_db
     username: ${DB_USER:notification_svc}
     password: ${DB_PASSWORD:notification_pwd}
   jpa:

@@ -7,7 +7,9 @@
 #
 # Port tren may host:
 #   8080 api-gateway (UI + /api)   9000 auth-service (trang login SSO)   8081 product-service (Swagger)
-#   8090 kafka-ui                  5432 postgres   9092 kafka   6379 redis
+#   8090 kafka-ui                  9092 kafka      6379 redis
+#   Postgres (moi service 1 instance): 5432 auth-db, 5433 product-db, 5434 order-db,
+#                                      5435 payment-db, 5436 notification-db
 #   observability: 3000 grafana, 9090 prometheus, 5601 kibana, 9200 elasticsearch
 
 name: microshop
@@ -22,7 +24,7 @@ x-service: &service
     microshop.logs: "true"          # Filebeat chi thu log cua container co label nay
   environment: &service-env
     LOG_FORMAT: ecs                 # log JSON (Elastic Common Schema) -> ELK parse duoc
-    DB_HOST: postgres
+    DB_PORT: "5432"                 # trong mang docker moi DB deu nghe 5432; DB_HOST dat rieng tung service
     KAFKA_BOOTSTRAP: kafka:29092
     REDIS_HOST: redis
     # Browser thay auth-service o localhost:9000, con container thay o auth-service:9000.
@@ -33,22 +35,67 @@ x-service: &service
     # Bat tracing: moi request co traceId, di xuyen qua REST va Kafka
     MANAGEMENT_TRACING_SAMPLING_PROBABILITY: "1.0"
 
+# Cau hinh chung cho 5 Postgres. Moi service co 1 instance rieng (Database per service):
+# container, volume, user, password deu tach biet -> service A khong the "nhin" thay data cua B.
+x-postgres: &postgres
+  image: postgres:18
+  restart: unless-stopped
+  mem_limit: 256m
+  healthcheck:
+    test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+    interval: 5s
+    timeout: 3s
+    retries: 20
+
 services:
-  # ---------------------------------------------------------------- infrastructure
-  postgres:
-    image: postgres:18
+  # ---------------------------------------------------------------- databases (1 service = 1 Postgres)
+  # Moi DB 1 port host khac nhau: de chay service trong IDE hoac mo bang DBeaver/pgAdmin.
+  auth-db:
+    <<: *postgres
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: auth_db
+      POSTGRES_USER: auth_svc
+      POSTGRES_PASSWORD: auth_pwd
     ports: ["5432:5432"]
-    volumes:
-      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
-      - pgdata:/var/lib/postgresql
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 3s
-      retries: 20
+    volumes: [auth-db-data:/var/lib/postgresql]
+
+  product-db:
+    <<: *postgres
+    environment:
+      POSTGRES_DB: product_db
+      POSTGRES_USER: product_svc
+      POSTGRES_PASSWORD: product_pwd
+    ports: ["5433:5432"]
+    volumes: [product-db-data:/var/lib/postgresql]
+
+  order-db:
+    <<: *postgres
+    environment:
+      POSTGRES_DB: order_db
+      POSTGRES_USER: order_svc
+      POSTGRES_PASSWORD: order_pwd
+    ports: ["5434:5432"]
+    volumes: [order-db-data:/var/lib/postgresql]
+
+  payment-db:
+    <<: *postgres
+    environment:
+      POSTGRES_DB: payment_db
+      POSTGRES_USER: payment_svc
+      POSTGRES_PASSWORD: payment_pwd
+    ports: ["5435:5432"]
+    volumes: [payment-db-data:/var/lib/postgresql]
+
+  notification-db:
+    <<: *postgres
+    environment:
+      POSTGRES_DB: notification_db
+      POSTGRES_USER: notification_svc
+      POSTGRES_PASSWORD: notification_pwd
+    ports: ["5436:5432"]
+    volumes: [notification-db-data:/var/lib/postgresql]
+
+  # ---------------------------------------------------------------- infrastructure
 
   kafka:
     image: apache/kafka:4.2.0
@@ -101,6 +148,7 @@ services:
     build: { <<: *build, args: { MODULE: auth-service } }
     environment:
       <<: *service-env
+      DB_HOST: auth-db
       AUTH_ISSUER: http://localhost:9000
       GATEWAY_URL: http://localhost:8080
       # Tao OAuth App tren GitHub (xem README) roi dat trong file .env
@@ -110,25 +158,31 @@ services:
     ports: ["9000:9000"]
     healthcheck: { test: ["CMD", "healthcheck", "9000"], interval: 5s, timeout: 3s, retries: 40, start_period: 20s }
     depends_on:
-      postgres: { condition: service_healthy }
+      auth-db: { condition: service_healthy }
 
   product-service:
     <<: *service
     build: { <<: *build, args: { MODULE: product-service } }
+    environment:
+      <<: *service-env
+      DB_HOST: product-db
     # Mo port de xem Swagger UI va thu goi thang service (khong qua gateway -> 401).
     # Cac service con lai chi nam trong mang docker: moi request phai di qua gateway.
     ports: ["8081:8081"]
     healthcheck: { test: ["CMD", "healthcheck", "8081"], interval: 5s, timeout: 3s, retries: 40, start_period: 20s }
     depends_on:
-      postgres: { condition: service_healthy }
+      product-db: { condition: service_healthy }
       auth-service: { condition: service_healthy }
 
   order-service:
     <<: *service
     build: { <<: *build, args: { MODULE: order-service } }
+    environment:
+      <<: *service-env
+      DB_HOST: order-db
     healthcheck: { test: ["CMD", "healthcheck", "8082"], interval: 5s, timeout: 3s, retries: 40, start_period: 20s }
     depends_on:
-      postgres: { condition: service_healthy }
+      order-db: { condition: service_healthy }
       kafka: { condition: service_healthy }
       auth-service: { condition: service_healthy }
       product-service: { condition: service_healthy }
@@ -136,18 +190,24 @@ services:
   payment-service:
     <<: *service
     build: { <<: *build, args: { MODULE: payment-service } }
+    environment:
+      <<: *service-env
+      DB_HOST: payment-db
     healthcheck: { test: ["CMD", "healthcheck", "8083"], interval: 5s, timeout: 3s, retries: 40, start_period: 20s }
     depends_on:
-      postgres: { condition: service_healthy }
+      payment-db: { condition: service_healthy }
       kafka: { condition: service_healthy }
       auth-service: { condition: service_healthy }
 
   notification-service:
     <<: *service
     build: { <<: *build, args: { MODULE: notification-service } }
+    environment:
+      <<: *service-env
+      DB_HOST: notification-db
     healthcheck: { test: ["CMD", "healthcheck", "8084"], interval: 5s, timeout: 3s, retries: 40, start_period: 20s }
     depends_on:
-      postgres: { condition: service_healthy }
+      notification-db: { condition: service_healthy }
       kafka: { condition: service_healthy }
       auth-service: { condition: service_healthy }
 
@@ -262,6 +322,10 @@ services:
         && echo ' -> data view OK'
 
 volumes:
-  pgdata:
+  auth-db-data:
+  product-db-data:
+  order-db-data:
+  payment-db-data:
+  notification-db-data:
   kafkadata:
   esdata:

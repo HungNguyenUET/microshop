@@ -47,7 +47,17 @@ flowchart LR
 | payment-service | 8083 | payment_db | Ví (Wallet): trừ tiền khi nhận `PaymentRequested`, trả kết quả qua Kafka |
 | notification-service | 8084 | notification_db | Nghe event đơn hàng, lưu và log thông báo |
 
-**Database per service:** cả 5 database nằm trên 1 container Postgres cho nhẹ máy, nhưng mỗi service có user riêng (`order_svc` không connect được `payment_db`). Xem [docker/postgres/init.sql](docker/postgres/init.sql).
+**Database per service:** mỗi service có **1 container Postgres riêng** (`auth-db`, `product-db`, `order-db`, `payment-db`, `notification-db`), với volume, user và mật khẩu riêng. Service chỉ biết địa chỉ DB của chính nó (`DB_HOST`). Muốn lấy dữ liệu của service khác thì phải gọi API hoặc nghe event, không thể đọc thẳng database của nhau.
+
+| Container | Database / user / mật khẩu | Port trên máy host |
+|---|---|---|
+| auth-db | `auth_db` / `auth_svc` / `auth_pwd` | 5432 |
+| product-db | `product_db` / `product_svc` / `product_pwd` | 5433 |
+| order-db | `order_db` / `order_svc` / `order_pwd` | 5434 |
+| payment-db | `payment_db` / `payment_svc` / `payment_pwd` | 5435 |
+| notification-db | `notification_db` / `notification_svc` / `notification_pwd` | 5436 |
+
+Có thể mở từng DB bằng DBeaver/pgAdmin qua port trên, hoặc `docker compose exec order-db psql -U order_svc -d order_db`.
 
 ---
 
@@ -59,7 +69,7 @@ Yêu cầu: JDK 25, Docker Desktop (hoặc Docker Engine + Compose v2), RAM tr�
 # 1. Build jar (Dockerfile copy jar có sẵn để build image nhanh)
 ./mvnw clean package -DskipTests
 
-# 2a. Chỉ chạy core: 6 service + Postgres, Kafka, Redis, Kafka UI
+# 2a. Chỉ chạy core: 6 service + 5 Postgres, Kafka, Redis, Kafka UI
 docker compose up -d --build
 
 # 2b. Hoặc chạy kèm Prometheus, Grafana, ELK
@@ -73,7 +83,7 @@ docker compose logs -f order-service payment-service notification-service
 docker compose --profile observability down -v
 ```
 
-> Log trong container ở dạng JSON (ECS) để đẩy vào ELK. Khi chạy service trong IDE (không đặt `LOG_FORMAT`), log hiển thị dạng text bình thường. Tất cả cấu hình mặc định đều trỏ về `localhost`, nên có thể `docker compose up -d postgres kafka redis` rồi chạy từng service trong IDE.
+> Log trong container ở dạng JSON (ECS) để đẩy vào ELK. Khi chạy service trong IDE (không đặt `LOG_FORMAT`), log hiển thị dạng text bình thường. Tất cả cấu hình mặc định đều trỏ về `localhost`, nên có thể `docker compose up -d auth-db product-db order-db payment-db notification-db kafka redis` rồi chạy từng service trong IDE (mỗi service mặc định nối tới đúng port DB của mình, 5432 đến 5436).
 
 ### Địa chỉ
 
@@ -231,7 +241,7 @@ sequenceDiagram
 | Scale consumer | `docker compose up -d --scale notification-service=3` | Kafka UI: 3 consumer chia nhau 3 partition |
 | Phân quyền | Gọi `/api/admin/orders` bằng user thường, rồi admin cấp quyền ADMIN cho user (tab Quản trị) và login lại | 403, sau đó 200 (quyền nằm trong JWT nên phải login lại mới có token mới) |
 | Zero trust | `curl -i localhost:8081/api/products` (OK, public) rồi `curl -i -X POST localhost:8081/api/products` | Gọi thẳng service, bỏ qua gateway vẫn bị 401: service tự validate JWT |
-| Database per service | `docker compose exec postgres psql -U order_svc -d payment_db` | Bị từ chối |
+| Database per service | `docker compose stop payment-db`, rồi xem sản phẩm, thêm giỏ hàng, đặt đơn và bấm thanh toán | Sản phẩm, giỏ hàng, đặt đơn vẫn chạy. Chỉ phần thanh toán hỏng: payment-service log lỗi kết nối DB, đơn kẹt ở `PAYMENT_PROCESSING`. Lỗi của 1 DB không kéo sập cả hệ thống. So sánh thêm: `docker compose exec order-db psql -U order_svc -d order_db -c '\dt'` chỉ thấy bảng của order, không có bảng ví |
 | Idempotency | Kafka UI: produce lại 1 message `PaymentRequested` cũ | Ví không bị trừ 2 lần |
 | Mở rộng | Viết Transactional Outbox cho order-service, hoặc thêm inventory-service | |
 
@@ -258,7 +268,6 @@ microshop/
 ├── notification-service/
 ├── docker/
 │   ├── service.Dockerfile  # 1 Dockerfile dùng chung, ARG MODULE
-│   ├── postgres/init.sql   # tạo 5 database + 5 user
 │   ├── prometheus/ grafana/ logstash/ filebeat/
 ├── scripts/e2e.js
 └── docker-compose.yaml
