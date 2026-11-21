@@ -1,7 +1,7 @@
 package com.microshop.payment;
 
-import com.microshop.events.OrderEvent.PaymentRequested;
-import com.microshop.events.PaymentEvent;
+import com.microshop.payment.events.OrderEvent.PaymentRequested;
+import com.microshop.payment.events.PaymentEvent;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

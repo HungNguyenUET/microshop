@@ -1,7 +1,7 @@
 package com.microshop.notification;
 
-import com.microshop.events.OrderEvent;
-import com.microshop.events.Topics;
+import com.microshop.notification.events.OrderEvent;
+import com.microshop.notification.events.Topics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;

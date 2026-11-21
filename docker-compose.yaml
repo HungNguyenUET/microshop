@@ -1,6 +1,6 @@
 # MicroShop - moi truong local
 #
-#   Build jar truoc:      ./mvnw clean package -DskipTests
+#   Moi service tu build image tu Dockerfile trong thu muc cua no (multi-stage, khong can build jar truoc).
 #   Chay core:            docker compose up -d --build
 #   Chay kem monitoring:  docker compose --profile observability up -d --build
 #   Xoa sach (ca data):   docker compose --profile observability down -v
@@ -15,9 +15,6 @@
 name: microshop
 
 x-service: &service
-  build: &build
-    context: .
-    dockerfile: docker/service.Dockerfile
   restart: unless-stopped
   mem_limit: 512m
   labels:
@@ -143,9 +140,11 @@ services:
       kafka: { condition: service_healthy }
 
   # ---------------------------------------------------------------- services
+  # Moi service build tu Dockerfile trong thu muc cua chinh no (sau nay = 1 repo rieng).
+  # Khi da tach repo va co registry: thay "build: ./x" bang "image: <registry>/x:<tag>".
   auth-service:
     <<: *service
-    build: { <<: *build, args: { MODULE: auth-service } }
+    build: ./auth-service
     environment:
       <<: *service-env
       DB_HOST: auth-db
@@ -162,7 +161,7 @@ services:
 
   product-service:
     <<: *service
-    build: { <<: *build, args: { MODULE: product-service } }
+    build: ./product-service
     environment:
       <<: *service-env
       DB_HOST: product-db
@@ -176,7 +175,7 @@ services:
 
   order-service:
     <<: *service
-    build: { <<: *build, args: { MODULE: order-service } }
+    build: ./order-service
     environment:
       <<: *service-env
       DB_HOST: order-db
@@ -189,7 +188,7 @@ services:
 
   payment-service:
     <<: *service
-    build: { <<: *build, args: { MODULE: payment-service } }
+    build: ./payment-service
     environment:
       <<: *service-env
       DB_HOST: payment-db
@@ -201,7 +200,7 @@ services:
 
   notification-service:
     <<: *service
-    build: { <<: *build, args: { MODULE: notification-service } }
+    build: ./notification-service
     environment:
       <<: *service-env
       DB_HOST: notification-db
@@ -213,7 +212,7 @@ services:
 
   api-gateway:
     <<: *service
-    build: { <<: *build, args: { MODULE: api-gateway } }
+    build: ./api-gateway
     environment:
       <<: *service-env
       GATEWAY_PUBLIC_URL: http://localhost:8080

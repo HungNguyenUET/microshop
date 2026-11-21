@@ -1,7 +1,7 @@
 package com.microshop.order.messaging;
 
-import com.microshop.events.OrderEvent;
-import com.microshop.events.Topics;
+import com.microshop.order.events.OrderEvent;
+import com.microshop.order.events.Topics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;

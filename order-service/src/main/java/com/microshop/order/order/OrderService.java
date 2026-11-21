@@ -1,6 +1,6 @@
 package com.microshop.order.order;
 
-import com.microshop.events.OrderEvent;
+import com.microshop.order.events.OrderEvent;
 import com.microshop.order.OrderExceptions;
 import com.microshop.order.cart.CartItem;
 import com.microshop.order.cart.CartService;

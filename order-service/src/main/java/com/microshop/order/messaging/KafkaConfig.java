@@ -1,6 +1,6 @@
 package com.microshop.order.messaging;
 
-import com.microshop.events.Topics;
+import com.microshop.order.events.Topics;
 import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.common.TopicPartition;
 import org.springframework.context.annotation.Bean;

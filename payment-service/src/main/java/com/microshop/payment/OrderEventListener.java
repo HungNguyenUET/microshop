@@ -1,8 +1,8 @@
 package com.microshop.payment;
 
-import com.microshop.events.OrderEvent;
-import com.microshop.events.PaymentEvent;
-import com.microshop.events.Topics;
+import com.microshop.payment.events.OrderEvent;
+import com.microshop.payment.events.PaymentEvent;
+import com.microshop.payment.events.Topics;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;

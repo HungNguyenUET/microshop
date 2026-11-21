@@ -71,9 +71,8 @@ cd ../microshop-frontend
 npm ci
 npm run build
 
-# 2. Build jar (Dockerfile copy jar có sẵn để build image nhanh)
+# 2. Không cần build jar trước: mỗi service có Dockerfile multi-stage riêng, tự build từ source
 cd ../microshop
-./mvnw clean package -DskipTests
 
 # 3a. Chỉ chạy core: 6 service + 5 Postgres, Kafka, Redis, Kafka UI
 docker compose up -d --build
@@ -88,6 +87,8 @@ docker compose logs -f order-service payment-service notification-service
 # Dừng và xóa sạch dữ liệu
 docker compose --profile observability down -v
 ```
+
+> **Mỗi service độc lập hoàn toàn**: không có `pom.xml` cha chung, không có jar dùng chung. Mỗi thư mục service có `pom.xml` (kế thừa thẳng `spring-boot-starter-parent`), Maven wrapper, `Dockerfile`, `.gitignore` riêng, nên có thể tách ra repo riêng và build/deploy độc lập. Build và test 1 service: `cd order-service && ./mvnw verify`. Build image 1 service: `docker build -t microshop/order-service order-service`.
 
 > Log trong container ở dạng JSON (ECS) để đẩy vào ELK. Khi chạy service trong IDE (không đặt `LOG_FORMAT`), log hiển thị dạng text bình thường. Tất cả cấu hình mặc định đều trỏ về `localhost`, nên có thể `docker compose up -d auth-db product-db order-db payment-db notification-db kafka redis` rồi chạy từng service trong IDE (mỗi service mặc định nối tới đúng port DB của mình, 5432 đến 5436).
 
@@ -221,7 +222,7 @@ sequenceDiagram
 - **Key = orderId**: mọi event của 1 đơn vào cùng partition nên giữ đúng thứ tự.
 - **Idempotency**: Kafka giao *at-least-once*. Payment và Notification lưu `event_id` UNIQUE, nhận trùng thì bỏ qua (Payment gửi lại kết quả cũ).
 - **Publish sau commit** (`@TransactionalEventListener(AFTER_COMMIT)`): không gửi event cho dữ liệu đã rollback. Đổi lại vẫn có thể mất event nếu service chết giữa commit và send. Đây là chỗ để giới thiệu **Transactional Outbox** (bài tập nâng cao).
-- **Event dùng chung** trong module `common-events` (sealed interface + JSON `type`). Thực tế nhiều team dùng schema registry thay cho jar dùng chung, nên đây là chỗ để thảo luận trade-off.
+- **Không có jar event dùng chung**: contract giữa các service là **định dạng JSON trên Kafka** (field + giá trị `type`), không phải class Java. Service sở hữu topic (producer) giữ bản gốc, mỗi consumer tự giữ bản sao trong package của mình (`com.microshop.<service>.events`), và có `EventContractTest` để cố định định dạng JSON. Đổi contract phải tương thích ngược (chỉ thêm field). Trade-off: trùng lặp code, đổi lại không service nào phải rebuild khi service khác đổi version. Bước tiếp theo trong thực tế: schema registry (Avro/JSON Schema) hoặc consumer-driven contract test (Pact).
 - **Service-to-service auth**: Order gọi Product bằng token `client_credentials` (role `SERVICE`), không dùng token của user.
 
 ---
@@ -266,15 +267,14 @@ Script đi qua: xem sản phẩm khi chưa login, login SSO, giỏ hàng, đặt
 
 ```text
 microshop/
-├── common-events/          # event Kafka dùng chung (record + sealed interface)
 ├── auth-service/           # Spring Authorization Server + GitHub login
 ├── api-gateway/            # Spring Cloud Gateway (BFF) + UI build tĩnh (static/)
 ├── product-service/
-├── order-service/          # cart/, order/, client/ (REST tới product), messaging/ (Kafka)
+├── order-service/          # cart/, order/, client/ (REST tới product), messaging/ + events/ (Kafka)
 ├── payment-service/
 ├── notification-service/
+│                           # mỗi service: pom.xml, mvnw, Dockerfile, healthcheck.sh, .gitignore riêng
 ├── docker/
-│   ├── service.Dockerfile  # 1 Dockerfile dùng chung, ARG MODULE
 │   ├── prometheus/ grafana/ logstash/ filebeat/
 ├── scripts/e2e.js
 microshop-frontend/         # React + TypeScript storefront (build vào api-gateway/static/)

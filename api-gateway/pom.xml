@@ -3,13 +3,38 @@
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
+    <!-- Service doc lap: ke thua thang Spring Boot, KHONG co parent pom chung cua MicroShop.
+         Co the tach thu muc nay ra 1 repo rieng va build/deploy doc lap. -->
     <parent>
-        <groupId>com.microshop</groupId>
-        <artifactId>microshop-parent</artifactId>
-        <version>1.0.0-SNAPSHOT</version>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>4.1.2</version>
+        <relativePath/>
     </parent>
+
+    <groupId>com.microshop</groupId>
     <artifactId>api-gateway</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
     <description>API Gateway (Spring Cloud Gateway) theo mo hinh BFF: OAuth2 login, TokenRelay, CSRF, Redis session, rate limit, circuit breaker.</description>
+
+    <properties>
+        <java.version>25</java.version>
+        <springdoc.version>3.2.0</springdoc.version>
+        <!-- Release train Spring Cloud tuong thich Spring Boot 4.1.x -->
+        <spring-cloud.version>2025.1.4</spring-cloud.version>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.cloud</groupId>
+                <artifactId>spring-cloud-dependencies</artifactId>
+                <version>${spring-cloud.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
         <dependency>
@@ -24,6 +49,7 @@
             <!-- Swagger UI tap trung: gom /v3/api-docs cua moi service (route qua gateway) -->
             <groupId>org.springdoc</groupId>
             <artifactId>springdoc-openapi-starter-webflux-ui</artifactId>
+            <version>${springdoc.version}</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>

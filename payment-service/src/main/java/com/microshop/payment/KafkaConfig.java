@@ -1,6 +1,6 @@
 package com.microshop.payment;
 
-import com.microshop.events.Topics;
+import com.microshop.payment.events.Topics;
 import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.common.TopicPartition;
 import org.springframework.context.annotation.Bean;
