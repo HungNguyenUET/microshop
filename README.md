@@ -1,4 +1,5 @@
 # MicroShop: demo Microservices cho sinh viên
+## update by baopq
 
 Một shop bán hàng nhỏ, đủ để thấy toàn cảnh một hệ thống microservices: **API Gateway, SSO và phân quyền, REST giữa các service, event qua Kafka, database riêng cho từng service, metrics và log tập trung**.
 Nghiệp vụ được giữ tối giản để sinh viên tập trung vào **cách các service vận hành với nhau**.
@@ -279,3 +280,6 @@ microshop/
 - Elasticsearch tắt security, tắt ngưỡng ổ đĩa.
 - Không có Service Discovery (Eureka) hay Config Server: Docker DNS đủ cho local. Nên giới thiệu như bước tiếp theo, cùng với Kubernetes Service.
 - 1 broker Kafka, replication factor 1.
+
+
+### END
