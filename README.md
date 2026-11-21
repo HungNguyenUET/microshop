@@ -1,5 +1,5 @@
 # MicroShop: demo Microservices cho sinh viên
-
+## Updated by Nam
 Một shop bán hàng nhỏ, đủ để thấy toàn cảnh một hệ thống microservices: **API Gateway, SSO và phân quyền, REST giữa các service, event qua Kafka, database riêng cho từng service, metrics và log tập trung**.
 Nghiệp vụ được giữ tối giản để sinh viên tập trung vào **cách các service vận hành với nhau**.
 
